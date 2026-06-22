@@ -534,6 +534,7 @@ function resetAll(){
 /* ===== GIST SYNC ===== */
 const GIST_ID='deb7341be0163952be9a4840fc8a68d6';
 const GIST_FILE='confirmed_done.json';
+const GIST_DELETED_FILE='deleted_items.json';
 function getGistToken(){return localStorage.getItem('todo_gist_token')||''}
 
 async function pullFromGist(){
@@ -541,56 +542,77 @@ async function pullFromGist(){
   try{
     const r=await fetch(`https://api.github.com/gists/${GIST_ID}`,{headers:{'Authorization':`token ${token}`}});
     const d=await r.json();
-    const remote=JSON.parse(d.files[GIST_FILE].content);
     const s=load();
-    if(!s.confirmedDone)s.confirmedDone={};
-    let added=0;
-    for(const[id,date]of Object.entries(remote)){
-      if(!s.confirmedDone[id]){s.confirmedDone[id]=date;added++}
+    // Pull confirmed_done
+    if(d.files[GIST_FILE]){
+      const remote=JSON.parse(d.files[GIST_FILE].content);
+      if(!s.confirmedDone)s.confirmedDone={};
+      let added=0;
+      for(const[id,date]of Object.entries(remote)){
+        if(!s.confirmedDone[id]){s.confirmedDone[id]=date;added++}
+      }
+    }
+    // Pull deleted_items
+    if(d.files[GIST_DELETED_FILE]){
+      const remoteDel=JSON.parse(d.files[GIST_DELETED_FILE].content);
+      if(!s.deleted)s.deleted=[];
+      let delAdded=0;
+      remoteDel.forEach(id=>{if(!s.deleted.includes(id)){s.deleted.push(id);delAdded++}});
     }
     save(s);render();
-    showToast(added>0?`✅ 拉取成功！新增 ${added} 项归档`:'✅ 拉取成功，已是最新');
+    showToast('✅ 拉取成功，已同步归档与删除状态');
   }catch(e){showToast('❌ 拉取失败：'+e.message)}
 }
 
-let _pushEntries=null;
+let _pushData=null;
 async function pushToGist(){
   const token=getGistToken();if(!token){alert('⚠️ 请先点击底部「⚙️ 设置Token」配置GitHub Token');return}
   const s=load();
   const confirmed=s.confirmedDone||{};
-  const entries=Object.entries(confirmed);
-  if(entries.length===0){showToast('暂无已归档任务可推送');return}
-  // 先从Gist拉取当前云端状态，算出差异
-  let remote={};
+  const deleted=s.deleted||[];
+  const names={};
+  [...DEFAULT_TODOS,...(s.addedItems||[])].forEach(i=>names[i.id]=i.text);
+  // Fetch remote state for diff
+  let remoteConfirmed={},remoteDeleted=[];
   try{
     const r=await fetch(`https://api.github.com/gists/${GIST_ID}`,{headers:{'Authorization':`token ${token}`}});
     const d=await r.json();
-    remote=JSON.parse(d.files[GIST_FILE].content);
+    if(d.files[GIST_FILE])remoteConfirmed=JSON.parse(d.files[GIST_FILE].content);
+    if(d.files[GIST_DELETED_FILE])remoteDeleted=JSON.parse(d.files[GIST_DELETED_FILE].content);
   }catch{}
-  const newEntries=entries.filter(([id])=>!remote[id]);
-  const names={};
-  [...DEFAULT_TODOS,...(s.addedItems||[])].forEach(i=>names[i.id]=i.text);
-  if(newEntries.length===0){showToast('没有新的归档需要推送，云端已是最新');return}
-  _pushEntries=entries;_pushToken=token;
-  document.getElementById('pushCount').textContent=`新增 ${newEntries.length} 项归档待推送（云端已有 ${Object.keys(remote).length} 项）：`;
-  document.getElementById('pushList').innerHTML=newEntries.map(([id,date])=>`<div style="display:flex;align-items:center;gap:8px"><span style="color:#34d399">✅</span><span style="flex:1;color:#d1d5db">${esc(names[id]||id)}</span><span style="color:#6b7280;font-size:12px">${date}</span></div>`).join('');
+  const newConfirmed=Object.entries(confirmed).filter(([id])=>!remoteConfirmed[id]);
+  const newDeleted=deleted.filter(id=>!remoteDeleted.includes(id));
+  if(newConfirmed.length===0&&newDeleted.length===0){showToast('没有新的变更需要推送，云端已是最新');return}
+  _pushData={confirmed,deleted,token,newConfirmed,newDeleted};
+  let html='';
+  if(newConfirmed.length>0){
+    html+=`<div style="margin-bottom:10px;color:#34d399;font-weight:600">✅ 新增归档 ${newConfirmed.length} 项</div>`;
+    html+=newConfirmed.map(([id,date])=>`<div style="display:flex;align-items:center;gap:8px;padding:2px 0"><span style="color:#34d399">✅</span><span style="flex:1;color:#d1d5db">${esc(names[id]||id)}</span><span style="color:#6b7280;font-size:12px">${date}</span></div>`).join('');
+  }
+  if(newDeleted.length>0){
+    html+=`<div style="margin:10px 0 6px;color:#f87171;font-weight:600">🗑️ 新增删除 ${newDeleted.length} 项</div>`;
+    html+=newDeleted.map(id=>`<div style="display:flex;align-items:center;gap:8px;padding:2px 0"><span style="color:#f87171">🗑️</span><span style="flex:1;color:#9ca3af;text-decoration:line-through">${esc(names[id]||id)}</span></div>`).join('');
+  }
+  document.getElementById('pushCount').textContent=`共 ${newConfirmed.length+newDeleted.length} 项变更待推送`;
+  document.getElementById('pushList').innerHTML=html;
   document.getElementById('pushModal').classList.add('show');
 }
-let _pushToken='';
-function closePushConfirm(){document.getElementById('pushModal').classList.remove('show');_pushEntries=null}
+function closePushConfirm(){document.getElementById('pushModal').classList.remove('show');_pushData=null}
 async function doPush(){
-  if(!_pushEntries)return;
-  const entries=_pushEntries;const token=_pushToken;
+  if(!_pushData)return;
+  const{confirmed,deleted,token}=_pushData;
   closePushConfirm();
-  const s=load();const confirmed=s.confirmedDone||{};
   try{
+    const files={};
+    files[GIST_FILE]={content:JSON.stringify(confirmed,null,2)};
+    files[GIST_DELETED_FILE]={content:JSON.stringify(deleted,null,2)};
     const r=await fetch(`https://api.github.com/gists/${GIST_ID}`,{
       method:'PATCH',
       headers:{'Authorization':`token ${token}`,'Content-Type':'application/json'},
-      body:JSON.stringify({files:{[GIST_FILE]:{content:JSON.stringify(confirmed,null,2)}}})
+      body:JSON.stringify({files})
     });
     if(!r.ok)throw new Error('HTTP '+r.status);
-    showToast('✅ 推送成功！归档已同步到云端');
+    showToast('✅ 推送成功！归档与删除已同步到云端');
   }catch(e){showToast('❌ 推送失败：'+e.message)}
 }
 
