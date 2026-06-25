@@ -600,19 +600,34 @@ async function pushToGist(){
 function closePushConfirm(){document.getElementById('pushModal').classList.remove('show');_pushData=null}
 async function doPush(){
   if(!_pushData)return;
-  const{confirmed,deleted,token}=_pushData;
+  const{confirmed,deleted,token,newConfirmed,newDeleted}=_pushData;
   closePushConfirm();
   try{
+    // MERGE logic: fetch latest Gist state first, then merge local changes
+    const fetchR=await fetch(`https://api.github.com/gists/${GIST_ID}`,{headers:{'Authorization':`token ${token}`}});
+    if(!fetchR.ok)throw new Error('Fetch Gist failed: HTTP '+fetchR.status);
+    const fetchD=await fetchR.json();
+    let remoteConfirmed={},remoteDeleted=[];
+    if(fetchD.files[GIST_FILE])remoteConfirmed=JSON.parse(fetchD.files[GIST_FILE].content);
+    if(fetchD.files[GIST_DELETED_FILE])remoteDeleted=JSON.parse(fetchD.files[GIST_DELETED_FILE].content);
+    // Merge: local confirmed entries into remote (additive, never remove remote entries)
+    const mergedConfirmed={...remoteConfirmed};
+    for(const[id,date]of Object.entries(confirmed)){mergedConfirmed[id]=date}
+    // Merge: local deleted entries into remote (additive)
+    const mergedDeleted=new Set(remoteDeleted);
+    deleted.forEach(id=>mergedDeleted.add(id));
     const files={};
-    files[GIST_FILE]={content:JSON.stringify(confirmed,null,2)};
-    files[GIST_DELETED_FILE]={content:JSON.stringify(deleted,null,2)};
+    files[GIST_FILE]={content:JSON.stringify(mergedConfirmed,null,2)};
+    files[GIST_DELETED_FILE]={content:JSON.stringify([...mergedDeleted],null,2)};
     const r=await fetch(`https://api.github.com/gists/${GIST_ID}`,{
       method:'PATCH',
       headers:{'Authorization':`token ${token}`,'Content-Type':'application/json'},
       body:JSON.stringify({files})
     });
     if(!r.ok)throw new Error('HTTP '+r.status);
-    showToast('✅ 推送成功！归档与删除已同步到云端');
+    // Also sync localStorage with merged state
+    const s=load();s.confirmedDone=mergedConfirmed;s.deleted=[...mergedDeleted];save(s);render();
+    showToast('✅ 推送成功！归档与删除已合并同步到云端');
   }catch(e){showToast('❌ 推送失败：'+e.message)}
 }
 
