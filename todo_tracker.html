@@ -209,39 +209,11 @@ h1{text-align:center;font-size:28px;font-weight:700;background:linear-gradient(9
 
 <script>
 /* ===== DATA ===== */
+/* 仅保留活跃待办；已归档/删除的任务由Gist管理，首次加载自动同步 */
 const DEFAULT_TODOS=[
-  {id:'sy3',text:'待老师修正程序后，重新投用自学习程序并测试',site:'射阳港现场',siteIcon:'🏭',tag:'⚠️ 外部依赖',tagClass:'tag-blocked',type:'daily'},
-  {id:'paper1',text:'继续分析运行状态数据（泵电流、发电机功率）',site:'论文进度',siteIcon:'📝',tag:'🆕 6/6新增',tagClass:'tag-new',type:'daily'},
-  {id:'sy4',text:'老师尚未提供完整自学习文件，仍有部分问题待解决',site:'射阳港现场',siteIcon:'🏭',tag:'🆕 6/8新增',tagClass:'tag-new',type:'daily'},
-  {id:'paper2',text:'深入分析冷端系统数据（基本跑通流程，明天继续）',site:'论文进度',siteIcon:'📝',tag:'🆕 6/8新增',tagClass:'tag-new',type:'daily'},
-  {id:'zh1',text:'自动更新前后端代码问题',site:'中核武汉现场',siteIcon:'🏭',type:'dated',deadline:'2026-06-08',note:'对方周一上班，可跟进'},
-  {id:'zh2',text:'三门现场导入失败',site:'中核武汉现场',siteIcon:'🏭',type:'dated',deadline:'2026-06-16',note:'确认世杰是否完成交涉'},
-  {id:'zh3',text:'找世杰学习linux版本更新',site:'中核武汉现场',siteIcon:'🏭',type:'dated',deadline:'2026-06-16',note:'出发前确认问题清单'},
-  {id:'sy1',text:'模型核查程序exa接口版本问题',site:'射阳港现场',siteIcon:'🏭',type:'dated',deadline:'2026-06-16',note:'预计统一修正'},
   {id:'sy2',text:'模型核查程序在国产化平台缺失点排查',site:'射阳港现场',siteIcon:'🏭',type:'dated',deadline:'2026-06-30',note:'对比国产化平台与标准环境依赖差异'},
-  {id:'sy5',text:'经济切换阈值表重算（预计下周开始）',site:'射阳港现场',siteIcon:'🏭',tag:'🆕 6/12新增',tagClass:'tag-new',type:'daily'},
-  {id:'sy6',text:'凝汽器模型重构（预计下周开始）',site:'射阳港现场',siteIcon:'🏭',tag:'🆕 6/12新增',tagClass:'tag-new',type:'daily'},
-  {id:'paper3',text:'整理数据，深度剖析冷端系统',site:'论文进度',siteIcon:'📝',tag:'🆕 6/13计划',tagClass:'tag-new',type:'daily'},
-  {id:'paper4',text:'凝结水温度压力反推计算实现（IAPWS-97）',site:'论文进度',siteIcon:'📝',tag:'🆕 6/15新增',tagClass:'tag-new',type:'daily'}
-,
-  {id:'sy7',text:'C泵低速流量需单独处理（试验报告仅有高速数据）',site:'射阳港现场',siteIcon:'🏭',tag:'🆕 6/17新增',tagClass:'tag-new',type:'daily'},
-  {id:'sy8',text:'DCS全量数据补充功率法流量估算列（118,656行）',site:'射阳港现场',siteIcon:'🏭',tag:'🆕 6/17新增',tagClass:'tag-new',type:'daily'},
-  {id:'paper5',text:'用WebPlotDigitizer重新数字化试验报告修正曲线',site:'论文进度',siteIcon:'📝',tag:'🆕 6/17新增',tagClass:'tag-new',type:'daily'},
-  {id:'paper6',text:'本地PyTorch跑CANN模型（替换nn.Module+GPU加速）',site:'论文进度',siteIcon:'📝',tag:'🆕 6/17新增',tagClass:'tag-new',type:'daily'},
-  {id:'paper7',text:'CANN alpha搜索：[0.1, 0.3, 0.5, 0.7, 0.9]',site:'论文进度',siteIcon:'📝',tag:'🆕 6/17新增',tagClass:'tag-new',type:'daily'},
-  {id:'paper8',text:'加PG-CANN物理约束（能量守恒损失）',site:'论文进度',siteIcon:'📝',tag:'🆕 6/17新增',tagClass:'tag-new',type:'daily'}
+  {id:'paper3',text:'整理数据，深度剖析冷端系统',site:'论文进度',siteIcon:'📝',tag:'📋 进行中',tagClass:'tag-new',type:'daily'}
 ];
-
-/* 已确认完成（通过每日记录确认或手动确认归档） */
-const CONFIRMED_DONE={
-  zh1:'2026-06-09',
-  zh2:'2026-06-09',
-  lqtest:'2026-06-10',
-  sy3:'2026-06-11',
-  sy4:'2026-06-11',
-  paper1:'2026-06-11',
-  paper2:'2026-06-11'
-};
 
 const SITE_ICONS={'射阳港现场':'🏭','中核武汉现场':'🏭','论文进度':'📝','其他':'📌'};
 const SK='todo_tracker_v6';
@@ -250,7 +222,7 @@ const SK='todo_tracker_v6';
 function load(){try{return JSON.parse(localStorage.getItem(SK))||{}}catch{return{}}}
 function save(s){localStorage.setItem(SK,JSON.stringify(s))}
 
-// Migrate from v5
+// Migrate from v5 only (no hardcoded seeding - Gist is source of truth)
 (function(){
   const v5k='todo_tracker_v5',v6k=SK;
   if(localStorage.getItem(v5k)&&!localStorage.getItem(v6k)){
@@ -260,33 +232,38 @@ function save(s){localStorage.setItem(SK,JSON.stringify(s))}
       save(n);
     }catch{}
   }
-  // Seed confirmed done from JS
-  const s=load();if(!s.confirmedDone)s.confirmedDone={};
-  let changed=false;
-  for(const[id,date]of Object.entries(CONFIRMED_DONE)){
-    if(!s.confirmedDone[id]){s.confirmedDone[id]=date;changed=true}
-  }
-  if(changed)save(s);
 })();
 
 function getActive(){
   const s=load();
-  const confirmed=new Set(Object.keys(s.confirmedDone||{}));
+  const cd=s.confirmedDone||{};
+  const confirmed=new Set(Object.keys(cd));
   const all=[...DEFAULT_TODOS,...(s.addedItems||[])];
-  const del=new Set(s.deleted||[]);
+  const del=new Set((s.deleted||[]).map(d=>typeof d==='string'?d:d.id));
   const ov=s.itemOverrides||{};
   return all.filter(i=>!del.has(i.id)&&!confirmed.has(i.id)).map(i=>({...i,...(ov[i.id]||{})}));
 }
 function getConfirmedItems(){
   const s=load();
-  const confirmed=s.confirmedDone||{};
+  const cd=s.confirmedDone||{};
   const all=[...DEFAULT_TODOS,...(s.addedItems||[])];
-  return all.filter(i=>confirmed[i.id]).map(i=>({...i,confirmedDate:confirmed[i.id]}));
+  const byId={};all.forEach(i=>byId[i.id]=i);
+  const result=[];
+  for(const[id,entry]of Object.entries(cd)){
+    // Handle both old format (string date) and new format ({date, text})
+    const date=typeof entry==='string'?entry:(entry.date||'');
+    const text=typeof entry==='object'?entry.text:(byId[id]?byId[id].text:'');
+    const site=byId[id]?byId[id].site:'';
+    const siteIcon=byId[id]?byId[id].siteIcon:'';
+    result.push({id,text:text||id,site,siteIcon,confirmedDate:date});
+  }
+  return result.sort((a,b)=>b.confirmedDate.localeCompare(a.confirmedDate));
 }
 function getById(id){const s=load();const all=[...DEFAULT_TODOS,...(s.addedItems||[])];return all.find(i=>i.id===id)}
 function isDone(id){const s=load();return s.done&&s.done[id]}
 function doneTime(id){const s=load();return s.doneTime&&s.doneTime[id]||''}
 function isConfirmed(id){const s=load();return !!(s.confirmedDone||{})[id]}
+function getConfirmedDate(id){const s=load();const e=(s.confirmedDone||{})[id];if(!e)return'';return typeof e==='string'?e:(e.date||'')}
 function getTag(item){
   if(item.deadline){const d=parseD(item.deadline);return{text:`📅 ${d.getMonth()+1}/${d.getDate()}到期`,cls:'tag-date'}}
   if(item.tag)return{text:item.tag,cls:item.tagClass||''};
@@ -432,7 +409,9 @@ function toggle(id){
 function confirmDone(id){
   const s=load();if(!s.confirmedDone)s.confirmedDone={};
   const today=new Date();const ds=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
-  s.confirmedDone[id]=ds;
+  // Store {date, text} so archived items can display even after removal from DEFAULT_TODOS
+  const item=getById(id);
+  s.confirmedDone[id]={date:ds,text:item?item.text:''};
   // Also mark as done
   if(!s.done)s.done={};if(!s.doneTime)s.doneTime={};
   s.done[id]=true;s.doneTime[id]=new Date().toLocaleString('zh-CN');
@@ -444,7 +423,7 @@ function undoConfirm(id){
   // Also uncheck
   if(s.done)delete s.done[id];
   if(s.doneTime)delete s.doneTime[id];
-  save(s);render();showToast('已恢复为待办');
+  save(s);render();showToast('已恢复为待办（注意：该任务已不在默认列表中，需重新添加）');
 }
 
 function toggleArchive(){
@@ -488,12 +467,15 @@ function saveEdit(){
 let lastDel=null,toastT=null;
 function delItem(id){
   const s=load();if(!s.deleted)s.deleted=[];
-  if(!s.deleted.includes(id)){s.deleted.push(id);save(s)}
+  const item=getById(id);
+  // Store {id, text} so deleted items display correctly even after removal from DEFAULT_TODOS
+  const entry=item?{id,text:item.text}:id;
+  if(!s.deleted.some(d=>(typeof d==='string'?d:d.id)===id)){s.deleted.push(entry);save(s)}
   lastDel=id;render();showToast('已删除该待办');
 }
 function undoDelete(){
   if(!lastDel)return;
-  const s=load();s.deleted=(s.deleted||[]).filter(d=>d!==lastDel);save(s);
+  const s=load();s.deleted=(s.deleted||[]).filter(d=>(typeof d==='string'?d:d.id)!==lastDel);save(s);
   lastDel=null;hideToast();render();
 }
 function showToast(t){
@@ -543,21 +525,35 @@ async function pullFromGist(){
     const r=await fetch(`https://api.github.com/gists/${GIST_ID}`,{headers:{'Authorization':`token ${token}`}});
     const d=await r.json();
     const s=load();
-    // Pull confirmed_done
+    const all=[...DEFAULT_TODOS,...(s.addedItems||[])];
+    const byId={};all.forEach(i=>byId[i.id]=i);
+    // Pull confirmed_done (handle both old string format and new {date,text} format)
     if(d.files[GIST_FILE]){
       const remote=JSON.parse(d.files[GIST_FILE].content);
       if(!s.confirmedDone)s.confirmedDone={};
-      let added=0;
-      for(const[id,date]of Object.entries(remote)){
-        if(!s.confirmedDone[id]){s.confirmedDone[id]=date;added++}
+      for(const[id,entry]of Object.entries(remote)){
+        if(!s.confirmedDone[id]){
+          // New format: {date, text}; Old format: just a date string
+          if(typeof entry==='object'){
+            s.confirmedDone[id]=entry;
+          }else{
+            const text=byId[id]?byId[id].text:id;
+            s.confirmedDone[id]={date:entry,text};
+          }
+        }
       }
     }
-    // Pull deleted_items
+    // Pull deleted_items (handle both old string format and new {id,text} format)
     if(d.files[GIST_DELETED_FILE]){
       const remoteDel=JSON.parse(d.files[GIST_DELETED_FILE].content);
       if(!s.deleted)s.deleted=[];
-      let delAdded=0;
-      remoteDel.forEach(id=>{if(!s.deleted.includes(id)){s.deleted.push(id);delAdded++}});
+      remoteDel.forEach(d=>{
+        const did=typeof d==='string'?d:d.id;
+        if(!s.deleted.some(x=>(typeof x==='string'?x:x.id)===did)){
+          const entry=typeof d==='object'?d:{id:did,text:byId[did]?byId[did].text:did};
+          s.deleted.push(entry);
+        }
+      });
     }
     save(s);render();
     showToast('✅ 拉取成功，已同步归档与删除状态');
@@ -580,18 +576,23 @@ async function pushToGist(){
     if(d.files[GIST_FILE])remoteConfirmed=JSON.parse(d.files[GIST_FILE].content);
     if(d.files[GIST_DELETED_FILE])remoteDeleted=JSON.parse(d.files[GIST_DELETED_FILE].content);
   }catch{}
+  const remoteDelIds=new Set(remoteDeleted.map(d=>typeof d==='string'?d:d.id));
   const newConfirmed=Object.entries(confirmed).filter(([id])=>!remoteConfirmed[id]);
-  const newDeleted=deleted.filter(id=>!remoteDeleted.includes(id));
+  const newDeleted=deleted.filter(d=>{const did=typeof d==='string'?d:d.id;return!remoteDelIds.has(did)});
   if(newConfirmed.length===0&&newDeleted.length===0){showToast('没有新的变更需要推送，云端已是最新');return}
-  _pushData={confirmed,deleted,token,newConfirmed,newDeleted};
+  _pushData={confirmed,deleted,token};
+  // Helper to get display text
+  const getTxt=(id,entry)=>{if(typeof entry==='object'&&entry.text)return entry.text;return names[id]||id};
+  const getDate=(id,entry)=>{if(typeof entry==='object')return entry.date||'';return entry||''};
+  const getDelTxt=d=>{if(typeof d==='object'&&d.text)return d.text;return names[typeof d==='string'?d:d.id]||(typeof d==='string'?d:d.id)};
   let html='';
   if(newConfirmed.length>0){
     html+=`<div style="margin-bottom:10px;color:#34d399;font-weight:600">✅ 新增归档 ${newConfirmed.length} 项</div>`;
-    html+=newConfirmed.map(([id,date])=>`<div style="display:flex;align-items:center;gap:8px;padding:2px 0"><span style="color:#34d399">✅</span><span style="flex:1;color:#d1d5db">${esc(names[id]||id)}</span><span style="color:#6b7280;font-size:12px">${date}</span></div>`).join('');
+    html+=newConfirmed.map(([id,entry])=>`<div style="display:flex;align-items:center;gap:8px;padding:2px 0"><span style="color:#34d399">✅</span><span style="flex:1;color:#d1d5db">${esc(getTxt(id,entry))}</span><span style="color:#6b7280;font-size:12px">${getDate(id,entry)}</span></div>`).join('');
   }
   if(newDeleted.length>0){
     html+=`<div style="margin:10px 0 6px;color:#f87171;font-weight:600">🗑️ 新增删除 ${newDeleted.length} 项</div>`;
-    html+=newDeleted.map(id=>`<div style="display:flex;align-items:center;gap:8px;padding:2px 0"><span style="color:#f87171">🗑️</span><span style="flex:1;color:#9ca3af;text-decoration:line-through">${esc(names[id]||id)}</span></div>`).join('');
+    html+=newDeleted.map(d=>`<div style="display:flex;align-items:center;gap:8px;padding:2px 0"><span style="color:#f87171">🗑️</span><span style="flex:1;color:#9ca3af;text-decoration:line-through">${esc(getDelTxt(d))}</span></div>`).join('');
   }
   document.getElementById('pushCount').textContent=`共 ${newConfirmed.length+newDeleted.length} 项变更待推送`;
   document.getElementById('pushList').innerHTML=html;
@@ -600,7 +601,7 @@ async function pushToGist(){
 function closePushConfirm(){document.getElementById('pushModal').classList.remove('show');_pushData=null}
 async function doPush(){
   if(!_pushData)return;
-  const{confirmed,deleted,token,newConfirmed,newDeleted}=_pushData;
+  const{confirmed,deleted,token}=_pushData;
   closePushConfirm();
   try{
     // MERGE logic: fetch latest Gist state first, then merge local changes
@@ -610,15 +611,20 @@ async function doPush(){
     let remoteConfirmed={},remoteDeleted=[];
     if(fetchD.files[GIST_FILE])remoteConfirmed=JSON.parse(fetchD.files[GIST_FILE].content);
     if(fetchD.files[GIST_DELETED_FILE])remoteDeleted=JSON.parse(fetchD.files[GIST_DELETED_FILE].content);
-    // Merge: local confirmed entries into remote (additive, never remove remote entries)
+    // Merge confirmed: local into remote (additive, new format {date, text})
     const mergedConfirmed={...remoteConfirmed};
-    for(const[id,date]of Object.entries(confirmed)){mergedConfirmed[id]=date}
-    // Merge: local deleted entries into remote (additive)
-    const mergedDeleted=new Set(remoteDeleted);
-    deleted.forEach(id=>mergedDeleted.add(id));
+    for(const[id,entry]of Object.entries(confirmed)){
+      if(typeof entry==='object'){mergedConfirmed[id]=entry}
+      else if(typeof remoteConfirmed[id]==='object'){/* keep remote's richer data */}
+      else{mergedConfirmed[id]=entry}
+    }
+    // Merge deleted: local into remote (additive, new format {id, text})
+    const mergedDeletedMap={};
+    remoteDeleted.forEach(d=>{const did=typeof d==='string'?d:d.id;mergedDeletedMap[did]=d});
+    deleted.forEach(d=>{const did=typeof d==='string'?d:d.id;if(!mergedDeletedMap[did])mergedDeletedMap[did]=d});
     const files={};
     files[GIST_FILE]={content:JSON.stringify(mergedConfirmed,null,2)};
-    files[GIST_DELETED_FILE]={content:JSON.stringify([...mergedDeleted],null,2)};
+    files[GIST_DELETED_FILE]={content:JSON.stringify(Object.values(mergedDeletedMap),null,2)};
     const r=await fetch(`https://api.github.com/gists/${GIST_ID}`,{
       method:'PATCH',
       headers:{'Authorization':`token ${token}`,'Content-Type':'application/json'},
@@ -626,7 +632,9 @@ async function doPush(){
     });
     if(!r.ok)throw new Error('HTTP '+r.status);
     // Also sync localStorage with merged state
-    const s=load();s.confirmedDone=mergedConfirmed;s.deleted=[...mergedDeleted];save(s);render();
+    const s=load();s.confirmedDone=mergedConfirmed;
+    s.deleted=Object.values(mergedDeletedMap);
+    save(s);render();
     showToast('✅ 推送成功！归档与删除已合并同步到云端');
   }catch(e){showToast('❌ 推送失败：'+e.message)}
 }
@@ -660,8 +668,46 @@ document.addEventListener('keydown',function(e){
   if(e.key==='Enter'&&document.getElementById('tokenModal').classList.contains('show'))saveTokenSettings();
 });
 
-/* ===== INIT ===== */
-render();
+/* ===== INIT: auto-sync from public Gist on first load ===== */
+(async function(){
+  // Initial render (shows only DEFAULT_TODOS immediately)
+  render();
+  // Fetch public Gist to sync confirmed_done + deleted_items for this browser
+  try{
+    const r=await fetch(`https://api.github.com/gists/${GIST_ID}`);
+    if(!r.ok)return;
+    const d=await r.json();
+    const s=load();
+    if(!s.confirmedDone)s.confirmedDone={};
+    if(!s.deleted)s.deleted=[];
+    const all=[...DEFAULT_TODOS,...(s.addedItems||[])];
+    const byId={};all.forEach(i=>byId[i.id]=i);
+    let changed=false;
+    // Sync confirmed_done (handle old string format and new {date,text} format)
+    if(d.files[GIST_FILE]){
+      const remote=JSON.parse(d.files[GIST_FILE].content);
+      for(const[id,entry]of Object.entries(remote)){
+        if(!s.confirmedDone[id]){
+          if(typeof entry==='object'){s.confirmedDone[id]=entry}
+          else{s.confirmedDone[id]={date:entry,text:byId[id]?byId[id].text:id}}
+          changed=true;
+        }
+      }
+    }
+    // Sync deleted_items
+    if(d.files[GIST_DELETED_FILE]){
+      const remoteDel=JSON.parse(d.files[GIST_DELETED_FILE].content);
+      remoteDel.forEach(item=>{
+        const did=typeof item==='string'?item:item.id;
+        if(!s.deleted.some(x=>(typeof x==='string'?x:x.id)===did)){
+          const entry=typeof item==='object'?item:{id:did,text:byId[did]?byId[did].text:did};
+          s.deleted.push(entry);changed=true;
+        }
+      });
+    }
+    if(changed){save(s);render()}
+  }catch{}
+})();
 </script>
 </body>
 </html>
